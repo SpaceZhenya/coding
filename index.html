@@ -1,88 +1,149 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8" />
-  <title>Тест игры</title>
-  <style>
-    body { margin: 0; overflow: hidden; }
-    canvas { display: block; }
-  </style>
+<meta charset="UTF-8">
+<title>Mini Brawl Stars</title>
+<style>
+body { margin:0; overflow:hidden; }
+canvas { display:block; }
+#hud { position:absolute; top:10px; left:10px; color:white; font-family:Arial; font-size:20px;}
+</style>
 </head>
 <body>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-  <script>
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 10, 20);
+<div id="hud">HP: 100 | Очки: 0</div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script>
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+const scene = new THREE.Scene();
+const camera = new THREE.OrthographicCamera(
+    window.innerWidth / -40, window.innerWidth / 40,
+    window.innerHeight / 40, window.innerHeight / -40,
+    0.1, 1000
+);
+camera.position.set(0, 50, 0);
+camera.lookAt(0, 0, 0);
+
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+// Свет
+scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+
+// Арена
+const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(50, 50),
+    new THREE.MeshStandardMaterial({color:0x228833})
+);
+ground.rotation.x = -Math.PI/2;
+scene.add(ground);
+
+// Игрок
+const player = new THREE.Mesh(
+    new THREE.BoxGeometry(2, 2, 2),
+    new THREE.MeshStandardMaterial({color:0x00ff00})
+);
+player.position.y = 1;
+scene.add(player);
+
+// Пули
+let bullets = [];
+
+// Враги
+let enemies = [];
+function spawnEnemy() {
+    const enemy = new THREE.Mesh(
+        new THREE.BoxGeometry(2,2,2),
+        new THREE.MeshStandardMaterial({color:0xff0000})
+    );
+    enemy.position.set((Math.random()-0.5)*40, 1, (Math.random()-0.5)*40);
+    scene.add(enemy);
+    enemies.push(enemy);
+}
+setInterval(spawnEnemy,3000);
+
+// Управление
+const keys = {};
+window.addEventListener("keydown", (e)=> keys[e.key]=true);
+window.addEventListener("keyup", (e)=> keys[e.key]=false);
+
+// Стрельба мышью
+window.addEventListener("click",(e)=>{
+    const vector = new THREE.Vector3();
+    vector.set(
+        ((e.clientX/window.innerWidth)*2-1)*25,
+        0,
+        ((1-e.clientY/window.innerHeight)*2-1)*25
+    );
+    const dir = new THREE.Vector3();
+    dir.subVectors(vector, player.position).normalize();
+
+    const bullet = new THREE.Mesh(
+        new THREE.SphereGeometry(0.5,8,8),
+        new THREE.MeshStandardMaterial({color:0xffff00})
+    );
+    bullet.position.copy(player.position);
+    bullet.position.y = 1;
+    bullet.userData = {dir: dir};
+    scene.add(bullet);
+    bullets.push(bullet);
+});
+
+// HUD
+let hp = 100;
+let score = 0;
+const hud = document.getElementById("hud");
+
+// Анимация
+function animate(){
+    requestAnimationFrame(animate);
+
+    // Движение игрока
+    if(keys["w"]) player.position.z -= 0.3;
+    if(keys["s"]) player.position.z += 0.3;
+    if(keys["a"]) player.position.x -= 0.3;
+    if(keys["d"]) player.position.x += 0.3;
+
+    // Пули летят
+    bullets.forEach((b,i)=>{
+        b.position.add(b.userData.dir.clone().multiplyScalar(0.5));
+        // Проверка столкновения с врагом
+        enemies.forEach((enemy,j)=>{
+            if(b.position.distanceTo(enemy.position)<1){
+                scene.remove(enemy);
+                enemies.splice(j,1);
+                scene.remove(b);
+                bullets.splice(i,1);
+                score += 10;
+                hud.textContent = `HP: ${hp} | Очки: ${score}`;
+            }
+        });
+    });
+
+    // Враги движутся к игроку
+    enemies.forEach((enemy)=>{
+        const dir = new THREE.Vector3().subVectors(player.position, enemy.position).normalize();
+        enemy.position.add(dir.multiplyScalar(0.1));
+        if(enemy.position.distanceTo(player.position)<1.5){
+            hp -= 1;
+            hud.textContent = `HP: ${hp} | Очки: ${score}`;
+            if(hp<=0) alert("Вы проиграли!");
+        }
+    });
+
+    renderer.render(scene,camera);
+}
+animate();
+
+window.addEventListener("resize",()=>{
+    camera.left = window.innerWidth/-40;
+    camera.right = window.innerWidth/40;
+    camera.top = window.innerHeight/40;
+    camera.bottom = window.innerHeight/-40;
+    camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
-    document.body.appendChild(renderer.domElement);
+});
 
-    // Свет
-    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1);
-    dirLight.position.set(10, 20, 10);
-    scene.add(dirLight);
-
-    // Земля
-    const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(200, 200),
-      new THREE.MeshStandardMaterial({ color: 0x228833 })
-    );
-    ground.rotation.x = -Math.PI / 2;
-    scene.add(ground);
-
-    // Замок (цилиндр)
-    const castle = new THREE.Mesh(
-      new THREE.CylinderGeometry(5, 5, 10, 32),
-      new THREE.MeshStandardMaterial({ color: 0x888888 })
-    );
-    castle.position.set(0, 5, -30);
-    scene.add(castle);
-
-    // Игрок
-    const player = new THREE.Mesh(
-      new THREE.BoxGeometry(2, 2, 2),
-      new THREE.MeshStandardMaterial({ color: 0x0000ff })
-    );
-    player.position.set(0, 1, 0);
-    scene.add(player);
-
-    // Враги
-    let enemies = [];
-    function spawnEnemy() {
-      const enemy = new THREE.Mesh(
-        new THREE.BoxGeometry(2, 2, 2),
-        new THREE.MeshStandardMaterial({ color: 0xff0000 })
-      );
-      enemy.position.set((Math.random() - 0.5) * 40, 1, 40);
-      scene.add(enemy);
-      enemies.push(enemy);
-    }
-    setInterval(spawnEnemy, 2000);
-
-    // Управление
-    const keys = {};
-    window.addEventListener("keydown", (e) => keys[e.key] = true);
-    window.addEventListener("keyup", (e) => keys[e.key] = false);
-
-    function animate() {
-      requestAnimationFrame(animate);
-
-      if (keys["w"]) player.position.z -= 0.2;
-      if (keys["s"]) player.position.z += 0.2;
-      if (keys["a"]) player.position.x -= 0.2;
-      if (keys["d"]) player.position.x += 0.2;
-
-      enemies.forEach(enemy => {
-        enemy.lookAt(castle.position);
-        enemy.translateZ(0.05);
-      });
-
-      renderer.render(scene, camera);
-    }
-    animate();
-  </script>
+</script>
 </body>
 </html>

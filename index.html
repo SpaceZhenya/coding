@@ -1,12 +1,12 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <title>3D Игра с препятствиями</title>
-  <style>
-    body { margin: 0; overflow: hidden; }
-    canvas { display: block; }
-  </style>
+<meta charset="UTF-8">
+<title>3D Игра: игрок как препятствие</title>
+<style>
+  body { margin: 0; overflow: hidden; }
+  canvas { display: block; }
+</style>
 </head>
 <body>
 <script src="https://cdn.jsdelivr.net/npm/three@0.155.0/build/three.min.js"></script>
@@ -41,11 +41,6 @@ const player = new THREE.Mesh(playerGeometry, playerMaterial);
 player.position.set(0, 0.5, 0);
 scene.add(player);
 
-// Платформы (можно оставить пустыми)
-const platformGeometry = new THREE.BoxGeometry(3, 0.5, 3);
-const platformMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
-const platforms = [];
-
 // Красные кубы-препятствия
 const obstacleGeometry = new THREE.BoxGeometry(1,1,1);
 const obstacleMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
@@ -64,45 +59,42 @@ obstaclePositions.forEach(pos => {
   obstacles.push(obs);
 });
 
-// --- Физика ---
+// --- Физика игрока ---
 let velocityY = 0;
 const gravity = -0.02;
 let canJump = false;
 
-// Управление
+// Управление игроком
 const keys = {};
 document.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
 document.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
-// Проверка столкновений с кубами по оси X и Z
-function checkCollision(newX, newY, newZ) {
-  for (let obs of obstacles) {
-    const dx = Math.abs(newX - obs.position.x);
-    const dy = Math.abs(newY - obs.position.y);
-    const dz = Math.abs(newZ - obs.position.z);
-
-    if (dx < 1 && dy < 1 && dz < 1) return true; // столкновение
+// Проверка столкновений с объектами
+function isColliding(x, y, z, objects) {
+  for (let obj of objects) {
+    const dx = Math.abs(x - obj.position.x);
+    const dy = Math.abs(y - obj.position.y);
+    const dz = Math.abs(z - obj.position.z);
+    if(dx < 1 && dy < 1 && dz < 1) return true;
   }
   return false;
 }
 
+// --- Логика движения игрока ---
 function handlePlayerMovement() {
   const speed = 0.1;
-  let moveX = 0;
-  let moveZ = 0;
+  let moveX = 0, moveZ = 0;
 
   if(keys['w'] || keys['arrowup']) moveZ -= speed;
   if(keys['s'] || keys['arrowdown']) moveZ += speed;
   if(keys['a'] || keys['arrowleft']) moveX -= speed;
   if(keys['d'] || keys['arrowright']) moveX += speed;
 
-  // Проверяем столкновения отдельно по X
-  if(!checkCollision(player.position.x + moveX, player.position.y, player.position.z)) {
+  // Проверка столкновений по X и Z с красными кубами
+  if(!isColliding(player.position.x + moveX, player.position.y, player.position.z, obstacles)) {
     player.position.x += moveX;
   }
-
-  // Проверяем столкновения отдельно по Z
-  if(!checkCollision(player.position.x, player.position.y, player.position.z + moveZ)) {
+  if(!isColliding(player.position.x, player.position.y, player.position.z + moveZ, obstacles)) {
     player.position.z += moveZ;
   }
 
@@ -116,31 +108,30 @@ function handlePlayerMovement() {
   velocityY += gravity;
   player.position.y += velocityY;
 
-  // Проверка столкновений с платформами и землей
-  canJump = false;
-  const platformsToCheck = [...platforms, ground];
-  for (let p of platformsToCheck) {
-    const px = p.position.x;
-    const py = p.position.y + (p.geometry.parameters.height || 0)/2;
-    const pz = p.position.z;
-    const width = (p.geometry.parameters.width || 50)/2;
-    const depth = (p.geometry.parameters.depth || 50)/2;
-
-    if (
-      player.position.x > px - width && player.position.x < px + width &&
-      player.position.z > pz - depth && player.position.z < pz + depth &&
-      player.position.y <= py + 0.5 && player.position.y >= py
-    ) {
-      player.position.y = py + 0.5;
-      velocityY = 0;
-      canJump = true;
-    }
+  // Столкновение с землей
+  if(player.position.y <= 0.5) {
+    player.position.y = 0.5;
+    velocityY = 0;
+    canJump = true;
   }
+}
+
+// --- Движущиеся объекты (пример) ---
+function moveObstacles() {
+  // Все препятствия не могут проходить сквозь игрока
+  obstacles.forEach(obs => {
+    const speed = 0.02;
+    let newZ = obs.position.z + speed;
+    if(!isColliding(obs.position.x, obs.position.y, newZ, [player])) {
+      obs.position.z = newZ;
+    }
+  });
 }
 
 function animate() {
   requestAnimationFrame(animate);
   handlePlayerMovement();
+  moveObstacles();
   camera.lookAt(player.position);
   renderer.render(scene, camera);
 }

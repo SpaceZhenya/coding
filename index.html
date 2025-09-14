@@ -1,102 +1,156 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="UTF-8">
-<title>ИИ Учитель Математики (Интерактивный)</title>
-<style>
-body { font-family: Arial; background: #f0f8ff; padding: 20px; }
-#lesson, #instruction, #feedback { margin-bottom: 15px; font-size: 22px; }
-.block { display:inline-block; width:30px; height:30px; margin:2px; border-radius:5px; background-color:#f39c12; cursor:pointer; }
-#container { margin-bottom:10px; }
-#answer { font-size: 20px; padding:5px; width:80px; }
-button { font-size:20px; padding:5px; margin-left:10px; }
-#score { margin-top:10px; font-size:20px; }
-</style>
+  <meta charset="UTF-8">
+  <title>3D Игра с препятствиями</title>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    canvas { display: block; }
+  </style>
 </head>
 <body>
-
-<h1>Учимся считать с блоками!</h1>
-
-<div id="lesson"></div>
-<div id="instruction"></div>
-<div id="container"></div>
-<div>
-  <input type="number" id="answer" placeholder="Сколько всего?">
-  <button onclick="checkAnswer()">Ответить</button>
-</div>
-<div id="feedback"></div>
-<div id="score">Очки: 0</div>
-
+<script src="https://cdn.jsdelivr.net/npm/three@0.155.0/build/three.min.js"></script>
 <script>
-let score = 0;
-let a,b;
-let clickedCount = 0;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87ceeb);
 
-// Генерация примера
-function generateQuestion(){
-    a = Math.floor(Math.random()*20)+10;
-    b = Math.floor(Math.random()*20)+10;
-    clickedCount = 0;
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+camera.position.set(0, 5, 10);
 
-    document.getElementById('lesson').textContent = `Сложение чисел (3 класс): ${a} + ${b}`;
-    document.getElementById('instruction').textContent = 'Кликни по блокам, чтобы посчитать их!';
-    document.getElementById('feedback').textContent = '';
-    document.getElementById('answer').value = '';
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
 
-    const container = document.getElementById('container');
-    container.innerHTML = '';
+// Свет
+scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+directionalLight.position.set(5, 10, 7);
+scene.add(directionalLight);
 
-    // создаём блоки для a
-    for(let i=0;i<a;i++){
-        const div = document.createElement('div');
-        div.className = 'block';
-        div.onclick = () => handleClick(div);
-        container.appendChild(div);
-    }
+// Земля
+const groundGeometry = new THREE.PlaneGeometry(50, 50);
+const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x228B22 });
+const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+ground.rotation.x = -Math.PI/2;
+scene.add(ground);
 
-    // разделитель
-    const sep = document.createElement('div');
-    sep.style.width = '100%';
-    sep.style.height = '10px';
-    container.appendChild(sep);
+// Куб-игрок
+const playerGeometry = new THREE.BoxGeometry(1,1,1);
+const playerMaterial = new THREE.MeshStandardMaterial({ color: 0x0000ff });
+const player = new THREE.Mesh(playerGeometry, playerMaterial);
+player.position.set(0, 0.5, 0);
+scene.add(player);
 
-    // создаём блоки для b
-    for(let i=0;i<b;i++){
-        const div = document.createElement('div');
-        div.className = 'block';
-        div.onclick = () => handleClick(div);
-        container.appendChild(div);
-    }
+// Платформы (можно оставить пустыми)
+const platformGeometry = new THREE.BoxGeometry(3, 0.5, 3);
+const platformMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+const platforms = [];
+
+// Красные кубы-препятствия
+const obstacleGeometry = new THREE.BoxGeometry(1,1,1);
+const obstacleMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+const obstacles = [];
+
+const obstaclePositions = [
+  {x: 2, y: 0.5, z: -3},
+  {x: -2, y: 0.5, z: -6},
+  {x: 0, y: 0.5, z: -9},
+];
+
+obstaclePositions.forEach(pos => {
+  const obs = new THREE.Mesh(obstacleGeometry, obstacleMaterial);
+  obs.position.set(pos.x, pos.y, pos.z);
+  scene.add(obs);
+  obstacles.push(obs);
+});
+
+// --- Физика ---
+let velocityY = 0;
+const gravity = -0.02;
+let canJump = false;
+
+// Управление
+const keys = {};
+document.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+document.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+// Проверка столкновений с кубами по оси X и Z
+function checkCollision(newX, newY, newZ) {
+  for (let obs of obstacles) {
+    const dx = Math.abs(newX - obs.position.x);
+    const dy = Math.abs(newY - obs.position.y);
+    const dz = Math.abs(newZ - obs.position.z);
+
+    if (dx < 1 && dy < 1 && dz < 1) return true; // столкновение
+  }
+  return false;
 }
 
-// Обработка клика по блоку
-function handleClick(block){
-    block.style.backgroundColor = '#2ecc71'; // меняем цвет на зелёный
-    clickedCount++;
-}
+function handlePlayerMovement() {
+  const speed = 0.1;
+  let moveX = 0;
+  let moveZ = 0;
 
-// Проверка ответа
-function checkAnswer(){
-    const ans = parseInt(document.getElementById('answer').value);
-    const correct = a+b;
-    const feedback = document.getElementById('feedback');
+  if(keys['w'] || keys['arrowup']) moveZ -= speed;
+  if(keys['s'] || keys['arrowdown']) moveZ += speed;
+  if(keys['a'] || keys['arrowleft']) moveX -= speed;
+  if(keys['d'] || keys['arrowright']) moveX += speed;
 
-    if(ans === correct){
-        feedback.style.color = 'green';
-        feedback.textContent = `Правильно! ${a} + ${b} = ${correct} 🎉`;
-        score++;
-    } else {
-        feedback.style.color = 'red';
-        feedback.textContent = `Неправильно. Попробуй ещё раз. Правильный ответ: ${correct}`;
+  // Проверяем столкновения отдельно по X
+  if(!checkCollision(player.position.x + moveX, player.position.y, player.position.z)) {
+    player.position.x += moveX;
+  }
+
+  // Проверяем столкновения отдельно по Z
+  if(!checkCollision(player.position.x, player.position.y, player.position.z + moveZ)) {
+    player.position.z += moveZ;
+  }
+
+  // Прыжок
+  if((keys[' '] || keys['space']) && canJump) {
+    velocityY = 0.3;
+    canJump = false;
+  }
+
+  // Гравитация
+  velocityY += gravity;
+  player.position.y += velocityY;
+
+  // Проверка столкновений с платформами и землей
+  canJump = false;
+  const platformsToCheck = [...platforms, ground];
+  for (let p of platformsToCheck) {
+    const px = p.position.x;
+    const py = p.position.y + (p.geometry.parameters.height || 0)/2;
+    const pz = p.position.z;
+    const width = (p.geometry.parameters.width || 50)/2;
+    const depth = (p.geometry.parameters.depth || 50)/2;
+
+    if (
+      player.position.x > px - width && player.position.x < px + width &&
+      player.position.z > pz - depth && player.position.z < pz + depth &&
+      player.position.y <= py + 0.5 && player.position.y >= py
+    ) {
+      player.position.y = py + 0.5;
+      velocityY = 0;
+      canJump = true;
     }
-
-    document.getElementById('score').textContent = `Очки: ${score}`;
-    generateQuestion();
+  }
 }
 
-// Запуск
-generateQuestion();
+function animate() {
+  requestAnimationFrame(animate);
+  handlePlayerMovement();
+  camera.lookAt(player.position);
+  renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
 </script>
-
 </body>
 </html>

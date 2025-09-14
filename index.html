@@ -57,7 +57,7 @@ const obstaclePositions = [
 obstaclePositions.forEach(pos => {
   const obs = new THREE.Mesh(obstacleGeometry, obstacleMaterial);
   obs.position.set(pos.x, pos.y, pos.z);
-  obs.userData.dir = 1; // направление движения по Z
+  obs.userData.dir = 1;
   scene.add(obs);
   obstacles.push(obs);
 });
@@ -111,13 +111,13 @@ function handlePlayerMovement() {
     const dz = Math.abs(newZ - obs.position.z);
 
     if(dx < 1 && dy < 1 && dz < 1) {
-      // Если игрок сверху препятствия
+      // Игрок сверху препятствия
       if(player.position.y > obs.position.y) {
         newY = obs.position.y + 1;
         velocityY = 0;
         canJump = true;
       } else {
-        // Блокируем движение по X/Z
+        // Боковые столкновения
         if(dx >= dz) newX = player.position.x;
         else newZ = player.position.z;
         velocityY = 0;
@@ -125,12 +125,10 @@ function handlePlayerMovement() {
     }
   });
 
-  // Ограничения карты
   newX = Math.max(mapLimits.xMin, Math.min(mapLimits.xMax, newX));
   newZ = Math.max(mapLimits.zMin, Math.min(mapLimits.zMax, newZ));
   newY = Math.max(0.5, newY);
 
-  // Прыжок
   if((keys[' '] || keys['space']) && canJump) {
     velocityY = 0.3;
     canJump = false;

@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>3D Игра: игрок как препятствие</title>
+<title>3D Игра с препятствиями и камерой</title>
 <style>
   body { margin: 0; overflow: hidden; }
   canvas { display: block; }
@@ -14,9 +14,11 @@
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87ceeb);
 
+// Камера
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
 camera.position.set(0, 5, 10);
 
+// Рендерер
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
@@ -34,14 +36,14 @@ const ground = new THREE.Mesh(groundGeometry, groundMaterial);
 ground.rotation.x = -Math.PI/2;
 scene.add(ground);
 
-// Куб-игрок
+// Игрок
 const playerGeometry = new THREE.BoxGeometry(1,1,1);
 const playerMaterial = new THREE.MeshStandardMaterial({ color: 0x0000ff });
 const player = new THREE.Mesh(playerGeometry, playerMaterial);
 player.position.set(0, 0.5, 0);
 scene.add(player);
 
-// Красные кубы-препятствия
+// Красные препятствия
 const obstacleGeometry = new THREE.BoxGeometry(1,1,1);
 const obstacleMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
 const obstacles = [];
@@ -55,6 +57,7 @@ const obstaclePositions = [
 obstaclePositions.forEach(pos => {
   const obs = new THREE.Mesh(obstacleGeometry, obstacleMaterial);
   obs.position.set(pos.x, pos.y, pos.z);
+  obs.userData.dir = 1; // направление движения по Z
   scene.add(obs);
   obstacles.push(obs);
 });
@@ -69,7 +72,15 @@ const keys = {};
 document.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
 document.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
-// Проверка столкновений с объектами
+// Ограничения карты
+const mapLimits = {
+  xMin: -25,
+  xMax: 25,
+  zMin: -25,
+  zMax: 25
+};
+
+// Проверка столкновений
 function isColliding(x, y, z, objects) {
   for (let obj of objects) {
     const dx = Math.abs(x - obj.position.x);
@@ -80,7 +91,7 @@ function isColliding(x, y, z, objects) {
   return false;
 }
 
-// --- Логика движения игрока ---
+// Движение игрока
 function handlePlayerMovement() {
   const speed = 0.1;
   let moveX = 0, moveZ = 0;
@@ -90,12 +101,17 @@ function handlePlayerMovement() {
   if(keys['a'] || keys['arrowleft']) moveX -= speed;
   if(keys['d'] || keys['arrowright']) moveX += speed;
 
-  // Проверка столкновений по X и Z с красными кубами
-  if(!isColliding(player.position.x + moveX, player.position.y, player.position.z, obstacles)) {
-    player.position.x += moveX;
+  let newX = player.position.x + moveX;
+  let newZ = player.position.z + moveZ;
+
+  // Проверка границ карты и столкновений
+  if(newX >= mapLimits.xMin && newX <= mapLimits.xMax &&
+     !isColliding(newX, player.position.y, player.position.z, obstacles)) {
+    player.position.x = newX;
   }
-  if(!isColliding(player.position.x, player.position.y, player.position.z + moveZ, obstacles)) {
-    player.position.z += moveZ;
+  if(newZ >= mapLimits.zMin && newZ <= mapLimits.zMax &&
+     !isColliding(player.position.x, player.position.y, newZ, obstacles)) {
+    player.position.z = newZ;
   }
 
   // Прыжок
@@ -108,7 +124,6 @@ function handlePlayerMovement() {
   velocityY += gravity;
   player.position.y += velocityY;
 
-  // Столкновение с землей
   if(player.position.y <= 0.5) {
     player.position.y = 0.5;
     velocityY = 0;
@@ -116,27 +131,51 @@ function handlePlayerMovement() {
   }
 }
 
-// --- Движущиеся объекты (пример) ---
+// Движение препятствий
 function moveObstacles() {
-  // Все препятствия не могут проходить сквозь игрока
   obstacles.forEach(obs => {
-    const speed = 0.02;
+    const speed = 0.05 * obs.userData.dir;
     let newZ = obs.position.z + speed;
+
+    // Ограничение карты: отскакивание при достижении края
+    if(newZ < mapLimits.zMin) { 
+      newZ = mapLimits.zMin; 
+      obs.userData.dir = 1; 
+    }
+    if(newZ > mapLimits.zMax) { 
+      newZ = mapLimits.zMax; 
+      obs.userData.dir = -1; 
+    }
+
+    // Проверка столкновения с игроком
     if(!isColliding(obs.position.x, obs.position.y, newZ, [player])) {
       obs.position.z = newZ;
     }
   });
 }
 
+// Камера следует за игроком
+function updateCamera() {
+  const offsetY = 5;
+  const offsetZ = 10;
+  camera.position.x = player.position.x;
+  camera.position.y = player.position.y + offsetY;
+  camera.position.z = player.position.z + offsetZ;
+  camera.lookAt(player.position);
+}
+
+// Анимация
 function animate() {
   requestAnimationFrame(animate);
   handlePlayerMovement();
   moveObstacles();
-  camera.lookAt(player.position);
+  updateCamera();
   renderer.render(scene, camera);
 }
+
 animate();
 
+// Подстраиваем под размер окна
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth/window.innerHeight;
   camera.updateProjectionMatrix();

@@ -2,185 +2,198 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>3D Игра с препятствиями и камерой</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Стратегическая аркада: армия</title>
 <style>
-  body { margin: 0; overflow: hidden; }
-  canvas { display: block; }
+  body {
+    margin: 0;
+    background: #222;
+    color: white;
+    font-family: sans-serif;
+    text-align: center;
+  }
+  #gameCanvas {
+    display: block;
+    margin: 0 auto;
+    background: #333;
+    border: 2px solid #fff;
+  }
+  p { margin: 5px; }
 </style>
 </head>
 <body>
-<script src="https://cdn.jsdelivr.net/npm/three@0.155.0/build/three.min.js"></script>
+
+<h1>Командуй своей армией!</h1>
+<canvas id="gameCanvas" width="700" height="400"></canvas>
+<p>Армия: <span id="armySize">4</span> | Счет: <span id="score">0</span></p>
+<p>Выделите юнитов кликом мыши, затем кликните на врага для атаки или на поле для следования</p>
+
 <script>
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87ceeb);
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
 
-// Камера
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-camera.position.set(0, 5, 10);
-
-// Рендерер
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-document.body.appendChild(renderer.domElement);
-
-// Свет
-scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-directionalLight.position.set(5, 10, 7);
-scene.add(directionalLight);
-
-// Земля
-const groundGeometry = new THREE.PlaneGeometry(50, 50);
-const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x228B22 });
-const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-ground.rotation.x = -Math.PI/2;
-scene.add(ground);
-
-// Игрок
-const playerGeometry = new THREE.BoxGeometry(1,1,1);
-const playerMaterial = new THREE.MeshStandardMaterial({ color: 0x0000ff });
-const player = new THREE.Mesh(playerGeometry, playerMaterial);
-player.position.set(0, 0.5, 0);
-scene.add(player);
-
-// Красные препятствия
-const obstacleGeometry = new THREE.BoxGeometry(1,1,1);
-const obstacleMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
-const obstacles = [];
-
-const obstaclePositions = [
-  {x: 2, y: 0.5, z: -3},
-  {x: -2, y: 0.5, z: -6},
-  {x: 0, y: 0.5, z: -9},
+let player = { x: 50, y: 200, size: 20, color: 'cyan', speed: 4 };
+let army = [
+  { x: 30, y: 180, size: 15, color: 'blue', type: 'infantry', selected: false, target: null },
+  { x: 30, y: 220, size: 15, color: 'blue', type: 'archer', selected: false, target: null },
+  { x: 30, y: 200, size: 15, color: 'blue', type: 'infantry', selected: false, target: null }
 ];
-
-obstaclePositions.forEach(pos => {
-  const obs = new THREE.Mesh(obstacleGeometry, obstacleMaterial);
-  obs.position.set(pos.x, pos.y, pos.z);
-  obs.userData.dir = 1; // направление движения по Z
-  scene.add(obs);
-  obstacles.push(obs);
-});
-
-// --- Физика игрока ---
-let velocityY = 0;
-const gravity = -0.02;
-let canJump = false;
+let enemies = [];
+let score = 0;
 
 // Управление игроком
-const keys = {};
-document.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
-document.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+let keys = {};
+document.addEventListener('keydown', e => keys[e.key] = true);
+document.addEventListener('keyup', e => keys[e.key] = false);
 
-// Ограничения карты
-const mapLimits = {
-  xMin: -25,
-  xMax: 25,
-  zMin: -25,
-  zMax: 25
-};
+// Клик мыши для выделения и приказов
+canvas.addEventListener('click', e => {
+  const rect = canvas.getBoundingClientRect();
+  const mouseX = e.clientX - rect.left;
+  const mouseY = e.clientY - rect.top;
 
-// Проверка столкновений
-function isColliding(x, y, z, objects) {
-  for (let obj of objects) {
-    const dx = Math.abs(x - obj.position.x);
-    const dy = Math.abs(y - obj.position.y);
-    const dz = Math.abs(z - obj.position.z);
-    if(dx < 1 && dy < 1 && dz < 1) return true;
-  }
-  return false;
-}
-
-// Движение игрока
-function handlePlayerMovement() {
-  const speed = 0.1;
-  let moveX = 0, moveZ = 0;
-
-  if(keys['w'] || keys['arrowup']) moveZ -= speed;
-  if(keys['s'] || keys['arrowdown']) moveZ += speed;
-  if(keys['a'] || keys['arrowleft']) moveX -= speed;
-  if(keys['d'] || keys['arrowright']) moveX += speed;
-
-  let newX = player.position.x + moveX;
-  let newZ = player.position.z + moveZ;
-
-  // Проверка границ карты и столкновений
-  if(newX >= mapLimits.xMin && newX <= mapLimits.xMax &&
-     !isColliding(newX, player.position.y, player.position.z, obstacles)) {
-    player.position.x = newX;
-  }
-  if(newZ >= mapLimits.zMin && newZ <= mapLimits.zMax &&
-     !isColliding(player.position.x, player.position.y, newZ, obstacles)) {
-    player.position.z = newZ;
-  }
-
-  // Прыжок
-  if((keys[' '] || keys['space']) && canJump) {
-    velocityY = 0.3;
-    canJump = false;
-  }
-
-  // Гравитация
-  velocityY += gravity;
-  player.position.y += velocityY;
-
-  if(player.position.y <= 0.5) {
-    player.position.y = 0.5;
-    velocityY = 0;
-    canJump = true;
-  }
-}
-
-// Движение препятствий
-function moveObstacles() {
-  obstacles.forEach(obs => {
-    const speed = 0.05 * obs.userData.dir;
-    let newZ = obs.position.z + speed;
-
-    // Ограничение карты: отскакивание при достижении края
-    if(newZ < mapLimits.zMin) { 
-      newZ = mapLimits.zMin; 
-      obs.userData.dir = 1; 
+  // Сначала проверяем, кликнули ли на юнитов для выделения
+  let clickedUnit = false;
+  army.forEach(unit => {
+    if(mouseX >= unit.x && mouseX <= unit.x + unit.size &&
+       mouseY >= unit.y && mouseY <= unit.y + unit.size) {
+      unit.selected = !unit.selected;
+      clickedUnit = true;
     }
-    if(newZ > mapLimits.zMax) { 
-      newZ = mapLimits.zMax; 
-      obs.userData.dir = -1; 
-    }
+  });
 
-    // Проверка столкновения с игроком
-    if(!isColliding(obs.position.x, obs.position.y, newZ, [player])) {
-      obs.position.z = newZ;
-    }
+  if(!clickedUnit) {
+    // Если клик не на юните, отдаём приказ выделенным юнитам
+    army.forEach(unit => {
+      if(unit.selected) {
+        // Проверяем, клик на враге
+        let enemyClicked = enemies.find(e => mouseX >= e.x && mouseX <= e.x + e.size &&
+                                            mouseY >= e.y && mouseY <= e.y + e.size);
+        unit.target = enemyClicked || { x: mouseX, y: mouseY };
+      }
+    });
+  }
+});
+
+// Создание врагов
+function spawnEnemy() {
+  enemies.push({
+    x: canvas.width,
+    y: Math.random() * (canvas.height - 20),
+    size: 20,
+    color: 'red',
+    speed: 1 + Math.random() * 1.5,
+    health: 2
   });
 }
 
-// Камера следует за игроком
-function updateCamera() {
-  const offsetY = 5;
-  const offsetZ = 10;
-  camera.position.x = player.position.x;
-  camera.position.y = player.position.y + offsetY;
-  camera.position.z = player.position.z + offsetZ;
-  camera.lookAt(player.position);
+// Проверка столкновения
+function isColliding(a, b) {
+  return a.x < b.x + b.size &&
+         a.x + a.size > b.x &&
+         a.y < b.y + b.size &&
+         a.y + a.size > b.y;
 }
 
-// Анимация
-function animate() {
-  requestAnimationFrame(animate);
-  handlePlayerMovement();
-  moveObstacles();
-  updateCamera();
-  renderer.render(scene, camera);
+// Обновление игры
+function update() {
+  // Движение игрока
+  if(keys['ArrowUp']) player.y -= player.speed;
+  if(keys['ArrowDown']) player.y += player.speed;
+  if(keys['ArrowLeft']) player.x -= player.speed;
+  if(keys['ArrowRight']) player.x += player.speed;
+
+  player.x = Math.max(0, Math.min(canvas.width - player.size, player.x));
+  player.y = Math.max(0, Math.min(canvas.height - player.size, player.y));
+
+  // Движение армии
+  army.forEach(unit => {
+    if(unit.target) {
+      let dx = unit.target.x - unit.x;
+      let dy = unit.target.y - unit.y;
+      let dist = Math.sqrt(dx*dx + dy*dy);
+      if(dist > 1) {
+        unit.x += dx / dist * 2;
+        unit.y += dy / dist * 2;
+      } else {
+        // Если юнит достиг цели и это враг
+        if(enemies.includes(unit.target)) {
+          unit.target.health -= 1;
+          if(unit.target.health <= 0) {
+            score++;
+            document.getElementById('score').textContent = score;
+            enemies.splice(enemies.indexOf(unit.target), 1);
+          }
+        }
+        unit.target = null;
+      }
+    } else {
+      // Следовать за игроком если нет приказа
+      let dx = player.x - unit.x - 20;
+      let dy = player.y - unit.y;
+      unit.x += dx * 0.05;
+      unit.y += dy * 0.05;
+    }
+  });
+
+  // Враги двигаются к игроку
+  if(Math.random() < 0.01) spawnEnemy();
+  enemies.forEach(enemy => {
+    let dx = player.x - enemy.x;
+    let dy = player.y - enemy.y;
+    let dist = Math.sqrt(dx*dx + dy*dy);
+    enemy.x += dx / dist * enemy.speed;
+    enemy.y += dy / dist * enemy.speed;
+
+    if(isColliding(player, enemy)) {
+      alert(`Игра окончена! Ваш счет: ${score}`);
+      window.location.reload();
+    }
+
+    // Взаимодействие с армией
+    army.forEach(unit => {
+      if(isColliding(unit, enemy)) {
+        enemy.health -= 1;
+        if(enemy.health <= 0) {
+          score++;
+          document.getElementById('score').textContent = score;
+          enemies.splice(enemies.indexOf(enemy), 1);
+        }
+      }
+    });
+  });
 }
 
-animate();
+// Отрисовка
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-// Подстраиваем под размер окна
-window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth/window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-});
+  // Игрок
+  ctx.fillStyle = player.color;
+  ctx.fillRect(player.x, player.y, player.size, player.size);
+
+  // Армия
+  army.forEach(unit => {
+    ctx.fillStyle = unit.selected ? 'green' : unit.color;
+    ctx.fillRect(unit.x, unit.y, unit.size, unit.size);
+  });
+
+  // Враги
+  enemies.forEach(enemy => {
+    ctx.fillStyle = enemy.color;
+    ctx.fillRect(enemy.x, enemy.y, enemy.size, enemy.size);
+  });
+}
+
+// Игровой цикл
+function gameLoop() {
+  update();
+  draw();
+  requestAnimationFrame(gameLoop);
+}
+
+gameLoop();
 </script>
+
 </body>
 </html>

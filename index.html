@@ -14,11 +14,11 @@
 
 <h1>Сложная Tower Defense</h1>
 <p>Золото: <span id="gold">200</span> | Жизни: <span id="lives">15</span> | Волна: <span id="wave">1</span></p>
-<button onclick="setTowerType('archer')">Лучник (50 золота)</button>
-<button onclick="setTowerType('mage')">Маг (80 золота)</button>
-<button onclick="setTowerType('catapult')">Катапульта (100 золота)</button>
-<button onclick="setTowerType('slow')">Замедляющая (60 золота)</button>
-<button onclick="upgradeTower()">Улучшить выбранную башню (100 золота)</button>
+<button onclick="setTowerType('archer')">Лучник (50)</button>
+<button onclick="setTowerType('mage')">Маг (80)</button>
+<button onclick="setTowerType('catapult')">Катапульта (100)</button>
+<button onclick="setTowerType('slow')">Замедляющая (60)</button>
+<button onclick="upgradeTower()">Улучшить выбранную (100)</button>
 <canvas id="gameCanvas" width="800" height="400"></canvas>
 
 <script>
@@ -31,16 +31,20 @@ let wave = 1;
 let towerType = 'archer';
 let selectedTower = null;
 
-const path = [{x:0,y:100},{x:800,y:100}]; // один путь для упрощения
+const paths = [
+  [{x:0,y:100},{x:800,y:100}],
+  [{x:0,y:200},{x:800,y:200}],
+  [{x:0,y:300},{x:800,y:300}]
+];
 
 let enemies = [];
 let towers = [];
 let projectiles = [];
 
-// Типы башен
+// Тип башни
 function setTowerType(type){ towerType = type; }
 
-// Выбор и установка башни
+// Установка и выбор башни
 canvas.addEventListener('click', e=>{
   const rect = canvas.getBoundingClientRect();
   const x = e.clientX - rect.left;
@@ -67,85 +71,71 @@ function upgradeTower(){
   }
 }
 
-// Спавн врагов
+// Спавн врагов с разными типами
 function spawnEnemy(){
-  const typeRoll = Math.random();
+  const path = paths[Math.floor(Math.random()*paths.length)];
+  let typeRoll = Math.random();
   let type='normal', hp=10+wave*5, speed=1+wave*0.2;
   if(typeRoll<0.2){ type='fast'; hp=8+wave*4; speed=2+wave*0.3; }
   else if(typeRoll<0.35){ type='tank'; hp=25+wave*8; speed=0.5+wave*0.1; }
   else if(typeRoll<0.45){ type='healer'; hp=12+wave*5; speed=1+wave*0.2; }
-  enemies.push({x:path[0].x,y:path[0].y,size:20,hp,speed,type});
+  else if(typeRoll<0.55){ type='flying'; hp=15+wave*4; speed=1.5+wave*0.2; }
+  enemies.push({x:path[0].x, y:path[0].y, size:20, hp, speed, type, path});
 }
 
-// Движение и обновление врагов и башен
+// Движение и атака
 function update(){
-  // Движение врагов
   enemies.forEach((enemy,i)=>{
-    let dx = path[1].x - enemy.x;
-    let dy = path[1].y - enemy.y;
-    let dist = Math.sqrt(dx*dx+dy*dy);
-    enemy.x += dx/dist*enemy.speed;
-    enemy.y += dy/dist*enemy.speed;
-
-    if(dist<5){ enemies.splice(i,1); lives--; document.getElementById('lives').textContent = lives;
+    let target = enemy.path[1];
+    let dx=target.x-enemy.x, dy=target.y-enemy.y, dist=Math.sqrt(dx*dx+dy*dy);
+    enemy.x+=dx/dist*enemy.speed;
+    enemy.y+=dy/dist*enemy.speed;
+    if(dist<5){ enemies.splice(i,1); lives--; document.getElementById('lives').textContent=lives;
       if(lives<=0){ alert("Вы проиграли!"); window.location.reload(); }
     }
   });
 
-  // Башни атакуют врагов
-  towers.forEach(tower=>{
-    if(tower.cooldown>0) tower.cooldown--;
+  towers.forEach(t=>{
+    if(t.cooldown>0) t.cooldown--;
     enemies.forEach(enemy=>{
-      let dx=enemy.x-tower.x; let dy=enemy.y-tower.y; let dist=Math.sqrt(dx*dx+dy*dy);
-      if(dist<tower.range && tower.cooldown===0){
-        if(tower.type==='slow'){ enemy.speed*=0.5; tower.cooldown=50; }
-        else projectiles.push({x:tower.x,y:tower.y,target:enemy,damage:tower.damage,type:tower.type});
-        tower.cooldown = tower.type==='archer'?30:tower.type==='mage'?50:tower.type==='catapult'?80:50;
+      let dx=enemy.x-t.x; let dy=enemy.y-t.y; let dist=Math.sqrt(dx*dx+dy*dy);
+      if(dist<t.range && t.cooldown===0){
+        if(t.type==='slow') enemy.speed*=0.5;
+        else projectiles.push({x:t.x,y:t.y,target:enemy,damage:t.damage,type:t.type});
+        t.cooldown = t.type==='archer'?30:t.type==='mage'?50:t.type==='catapult'?80:50;
       }
     });
   });
 
-  // Движение снарядов
   projectiles.forEach((p,i)=>{
     if(!p.target){ projectiles.splice(i,1); return; }
-    let dx=p.target.x-p.x; let dy=p.target.y-p.y; let dist=Math.sqrt(dx*dx+dy*dy);
+    let dx=p.target.x-p.x, dy=p.target.y-p.y, dist=Math.sqrt(dx*dx+dy*dy);
     if(dist<5){
       p.target.hp-=p.damage;
       projectiles.splice(i,1);
-      if(p.target.hp<=0){
-        gold+=10; document.getElementById('gold').textContent = gold;
-        enemies.splice(enemies.indexOf(p.target),1);
-      }
-    }else{ p.x+=dx/dist*5; p.y+=dy/dist*5; }
+      if(p.target.hp<=0){ gold+=10; document.getElementById('gold').textContent=gold; enemies.splice(enemies.indexOf(p.target),1);}
+    } else { p.x+=dx/dist*5; p.y+=dy/dist*5; }
   });
 
-  // Спавн врагов по волнам
-  if(Math.random()<0.01*wave) spawnEnemy();
+  if(Math.random()<0.02*wave) spawnEnemy();
 }
 
 // Отрисовка
 function draw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  // Путь
-  ctx.strokeStyle='gray'; ctx.lineWidth=20;
-  ctx.beginPath(); ctx.moveTo(path[0].x,path[0].y); ctx.lineTo(path[1].x,path[1].y); ctx.stroke();
+  paths.forEach(path=>{ ctx.strokeStyle='gray'; ctx.lineWidth=20; ctx.beginPath(); ctx.moveTo(path[0].x,path[0].y); ctx.lineTo(path[1].x,path[1].y); ctx.stroke(); });
 
-  // Враги
-  enemies.forEach(e=>{ ctx.fillStyle=e.type==='fast'?'orange':e.type==='tank'?'darkred':e.type==='healer'?'green':'red';
+  enemies.forEach(e=>{ ctx.fillStyle=e.type==='fast'?'orange':e.type==='tank'?'darkred':e.type==='healer'?'green':e.type==='flying'?'white':'red';
     ctx.fillRect(e.x-e.size/2,e.y-e.size/2,e.size,e.size);
   });
 
-  // Башни
-  towers.forEach(t=>{
-    ctx.fillStyle=t.type==='archer'?'blue':t.type==='mage'?'purple':t.type==='catapult'?'brown':'cyan';
+  towers.forEach(t=>{ ctx.fillStyle=t.type==='archer'?'blue':t.type==='mage'?'purple':t.type==='catapult'?'brown':'cyan';
     ctx.fillRect(t.x-t.size/2,t.y-t.size/2,t.size,t.size);
-    ctx.strokeStyle='rgba(0,255,255,0.3)';
-    ctx.beginPath(); ctx.arc(t.x,t.y,t.range,0,Math.PI*2); ctx.stroke();
+    ctx.strokeStyle='rgba(0,255,255,0.3)'; ctx.beginPath(); ctx.arc(t.x,t.y,t.range,0,Math.PI*2); ctx.stroke();
   });
 
-  // Снаряды
-  projectiles.forEach(p=>{ ctx.fillStyle=p.type==='archer'?'yellow':p.type==='mage'?'orange':'white';
+  projectiles.forEach(p=>{ ctx.fillStyle=p.type==='archer'?'yellow':p.type==='mage'?'orange':p.type==='catapult'?'red':'white';
     ctx.beginPath(); ctx.arc(p.x,p.y,5,0,Math.PI*2); ctx.fill();
   });
 }

@@ -3,185 +3,144 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Стратегическая аркада: армия</title>
+<title>Продвинутая Tower Defense</title>
 <style>
-  body {
-    margin: 0;
-    background: #222;
-    color: white;
-    font-family: sans-serif;
-    text-align: center;
-  }
-  #gameCanvas {
-    display: block;
-    margin: 0 auto;
-    background: #333;
-    border: 2px solid #fff;
-  }
-  p { margin: 5px; }
+  body { margin:0; background:#222; color:white; font-family:sans-serif; text-align:center; }
+  canvas { display:block; margin:0 auto; background:#333; border:2px solid #fff; }
+  button { margin:5px; padding:5px 10px; }
 </style>
 </head>
 <body>
 
-<h1>Командуй своей армией!</h1>
+<h1>Продвинутая Tower Defense</h1>
+<p>Золото: <span id="gold">100</span> | Жизни: <span id="lives">10</span> | Волна: <span id="wave">1</span></p>
+<button onclick="setTowerType('archer')">Лучник (50 золота)</button>
+<button onclick="setTowerType('mage')">Маг (80 золота)</button>
 <canvas id="gameCanvas" width="700" height="400"></canvas>
-<p>Армия: <span id="armySize">4</span> | Счет: <span id="score">0</span></p>
-<p>Выделите юнитов кликом мыши, затем кликните на врага для атаки или на поле для следования</p>
 
 <script>
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-let player = { x: 50, y: 200, size: 20, color: 'cyan', speed: 4 };
-let army = [
-  { x: 30, y: 180, size: 15, color: 'blue', type: 'infantry', selected: false, target: null },
-  { x: 30, y: 220, size: 15, color: 'blue', type: 'archer', selected: false, target: null },
-  { x: 30, y: 200, size: 15, color: 'blue', type: 'infantry', selected: false, target: null }
-];
+let gold = 100;
+let lives = 10;
+let wave = 1;
+let towerType = 'archer';
+const path = [{x:0,y:200},{x:700,y:200}];
+
 let enemies = [];
-let score = 0;
+let towers = [];
+let projectiles = [];
 
-// Управление игроком
-let keys = {};
-document.addEventListener('keydown', e => keys[e.key] = true);
-document.addEventListener('keyup', e => keys[e.key] = false);
+// Установка типа башни
+function setTowerType(type) { towerType = type; }
 
-// Клик мыши для выделения и приказов
+// Клик для установки башни
 canvas.addEventListener('click', e => {
   const rect = canvas.getBoundingClientRect();
-  const mouseX = e.clientX - rect.left;
-  const mouseY = e.clientY - rect.top;
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
 
-  // Сначала проверяем, кликнули ли на юнитов для выделения
-  let clickedUnit = false;
-  army.forEach(unit => {
-    if(mouseX >= unit.x && mouseX <= unit.x + unit.size &&
-       mouseY >= unit.y && mouseY <= unit.y + unit.size) {
-      unit.selected = !unit.selected;
-      clickedUnit = true;
-    }
-  });
-
-  if(!clickedUnit) {
-    // Если клик не на юните, отдаём приказ выделенным юнитам
-    army.forEach(unit => {
-      if(unit.selected) {
-        // Проверяем, клик на враге
-        let enemyClicked = enemies.find(e => mouseX >= e.x && mouseX <= e.x + e.size &&
-                                            mouseY >= e.y && mouseY <= e.y + e.size);
-        unit.target = enemyClicked || { x: mouseX, y: mouseY };
-      }
-    });
+  if(towerType === 'archer' && gold >= 50) {
+    towers.push({ x, y, size:20, type:'archer', range:100, damage:5, cooldown:0 });
+    gold -= 50;
+  } else if(towerType === 'mage' && gold >= 80) {
+    towers.push({ x, y, size:20, type:'mage', range:120, damage:8, cooldown:0 });
+    gold -= 80;
   }
+  document.getElementById('gold').textContent = gold;
 });
 
-// Создание врагов
+// Спавн врагов
 function spawnEnemy() {
-  enemies.push({
-    x: canvas.width,
-    y: Math.random() * (canvas.height - 20),
-    size: 20,
-    color: 'red',
-    speed: 1 + Math.random() * 1.5,
-    health: 2
-  });
-}
-
-// Проверка столкновения
-function isColliding(a, b) {
-  return a.x < b.x + b.size &&
-         a.x + a.size > b.x &&
-         a.y < b.y + b.size &&
-         a.y + a.size > b.y;
+  enemies.push({ x:0, y:200, size:20, hp:10 + wave*5, speed:1 + wave*0.2 });
 }
 
 // Обновление игры
 function update() {
-  // Движение игрока
-  if(keys['ArrowUp']) player.y -= player.speed;
-  if(keys['ArrowDown']) player.y += player.speed;
-  if(keys['ArrowLeft']) player.x -= player.speed;
-  if(keys['ArrowRight']) player.x += player.speed;
-
-  player.x = Math.max(0, Math.min(canvas.width - player.size, player.x));
-  player.y = Math.max(0, Math.min(canvas.height - player.size, player.y));
-
-  // Движение армии
-  army.forEach(unit => {
-    if(unit.target) {
-      let dx = unit.target.x - unit.x;
-      let dy = unit.target.y - unit.y;
-      let dist = Math.sqrt(dx*dx + dy*dy);
-      if(dist > 1) {
-        unit.x += dx / dist * 2;
-        unit.y += dy / dist * 2;
-      } else {
-        // Если юнит достиг цели и это враг
-        if(enemies.includes(unit.target)) {
-          unit.target.health -= 1;
-          if(unit.target.health <= 0) {
-            score++;
-            document.getElementById('score').textContent = score;
-            enemies.splice(enemies.indexOf(unit.target), 1);
-          }
-        }
-        unit.target = null;
-      }
-    } else {
-      // Следовать за игроком если нет приказа
-      let dx = player.x - unit.x - 20;
-      let dy = player.y - unit.y;
-      unit.x += dx * 0.05;
-      unit.y += dy * 0.05;
+  // Движение врагов
+  enemies.forEach((enemy, i) => {
+    enemy.x += enemy.speed;
+    if(enemy.x > canvas.width) {
+      enemies.splice(i,1);
+      lives--;
+      document.getElementById('lives').textContent = lives;
+      if(lives<=0) { alert("Вы проиграли!"); window.location.reload(); }
     }
   });
 
-  // Враги двигаются к игроку
-  if(Math.random() < 0.01) spawnEnemy();
-  enemies.forEach(enemy => {
-    let dx = player.x - enemy.x;
-    let dy = player.y - enemy.y;
-    let dist = Math.sqrt(dx*dx + dy*dy);
-    enemy.x += dx / dist * enemy.speed;
-    enemy.y += dy / dist * enemy.speed;
-
-    if(isColliding(player, enemy)) {
-      alert(`Игра окончена! Ваш счет: ${score}`);
-      window.location.reload();
-    }
-
-    // Взаимодействие с армией
-    army.forEach(unit => {
-      if(isColliding(unit, enemy)) {
-        enemy.health -= 1;
-        if(enemy.health <= 0) {
-          score++;
-          document.getElementById('score').textContent = score;
-          enemies.splice(enemies.indexOf(enemy), 1);
-        }
+  // Башни атакуют врагов
+  towers.forEach(tower => {
+    if(tower.cooldown > 0) tower.cooldown--;
+    enemies.forEach(enemy => {
+      let dx = enemy.x - tower.x;
+      let dy = enemy.y - tower.y;
+      let dist = Math.sqrt(dx*dx + dy*dy);
+      if(dist < tower.range && tower.cooldown===0) {
+        projectiles.push({ x:tower.x, y:tower.y, target:enemy, damage:tower.damage, type:tower.type });
+        tower.cooldown = tower.type==='archer'?30:50;
       }
     });
   });
+
+  // Движение снарядов
+  projectiles.forEach((p,i)=>{
+    if(!p.target) { projectiles.splice(i,1); return; }
+    let dx = p.target.x - p.x;
+    let dy = p.target.y - p.y;
+    let dist = Math.sqrt(dx*dx+dy*dy);
+    if(dist<5) {
+      p.target.hp -= p.damage;
+      projectiles.splice(i,1);
+      if(p.target.hp <=0) {
+        gold +=10;
+        document.getElementById('gold').textContent = gold;
+        enemies.splice(enemies.indexOf(p.target),1);
+      }
+    } else {
+      p.x += dx/dist*5;
+      p.y += dy/dist*5;
+    }
+  });
+
+  // Спавн врагов по волнам
+  if(Math.random() < 0.01*wave) spawnEnemy();
 }
 
 // Отрисовка
 function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  // Игрок
-  ctx.fillStyle = player.color;
-  ctx.fillRect(player.x, player.y, player.size, player.size);
-
-  // Армия
-  army.forEach(unit => {
-    ctx.fillStyle = unit.selected ? 'green' : unit.color;
-    ctx.fillRect(unit.x, unit.y, unit.size, unit.size);
-  });
+  // Путь
+  ctx.strokeStyle='gray';
+  ctx.lineWidth=20;
+  ctx.beginPath();
+  ctx.moveTo(path[0].x,path[0].y);
+  ctx.lineTo(path[1].x,path[1].y);
+  ctx.stroke();
 
   // Враги
-  enemies.forEach(enemy => {
-    ctx.fillStyle = enemy.color;
-    ctx.fillRect(enemy.x, enemy.y, enemy.size, enemy.size);
+  enemies.forEach(e=>{
+    ctx.fillStyle='red';
+    ctx.fillRect(e.x-e.size/2,e.y-e.size/2,e.size,e.size);
+  });
+
+  // Башни
+  towers.forEach(t=>{
+    ctx.fillStyle=t.type==='archer'?'blue':'purple';
+    ctx.fillRect(t.x-t.size/2,t.y-t.size/2,t.size,t.size);
+    ctx.strokeStyle='rgba(0,255,255,0.3)';
+    ctx.beginPath();
+    ctx.arc(t.x,t.y,t.range,0,Math.PI*2);
+    ctx.stroke();
+  });
+
+  // Снаряды
+  projectiles.forEach(p=>{
+    ctx.fillStyle=p.type==='archer'?'yellow':'orange';
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,5,0,Math.PI*2);
+    ctx.fill();
   });
 }
 
@@ -194,6 +153,5 @@ function gameLoop() {
 
 gameLoop();
 </script>
-
 </body>
 </html>

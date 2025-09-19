@@ -27,6 +27,17 @@ select:hover, button:hover { background: #e6e6e6; }
 @keyframes slideIn {
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
+
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.7); }
+  70% { box-shadow: 0 0 0 12px rgba(46, 204, 113, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0); }
+}
+.recording {
+  background: #2ecc71 !important;
+  color: white;
+  animation: pulse 1.5s infinite;
+}
 </style>
 </head>
 <body>
@@ -97,6 +108,11 @@ const indicator1 = document.getElementById('indicator1');
 const indicator2 = document.getElementById('indicator2');
 const sound = document.getElementById('notify-sound');
 
+const startBtn1 = document.getElementById('start1');
+const stopBtn1 = document.getElementById('stop1');
+const startBtn2 = document.getElementById('start2');
+const stopBtn2 = document.getElementById('stop2');
+
 let activeLang1 = lang1Select.value;
 lang1Select.onchange = () => activeLang1 = lang1Select.value;
 
@@ -126,11 +142,27 @@ function addMessage(userClass, text, translation, targetLang){
   speechSynthesis.speak(utter);
 }
 
-document.getElementById('start1').onclick = () => { recognition1.lang = activeLang1; recognition1.start(); indicator1.style.background='green'; };
-document.getElementById('stop1').onclick = () => { recognition1.stop(); indicator1.style.background='red'; };
+// --- Управление User1 ---
+startBtn1.onclick = () => { 
+  recognition1.lang = activeLang1; recognition1.start(); 
+  indicator1.style.background='green'; 
+  startBtn1.classList.add('recording');
+};
+stopBtn1.onclick = () => { 
+  recognition1.stop(); indicator1.style.background='red'; 
+  startBtn1.classList.remove('recording');
+};
 
-document.getElementById('start2').onclick = () => { recognition2.lang = lang2Select.value + '-' + lang2Select.value.toUpperCase(); recognition2.start(); indicator2.style.background='green'; };
-document.getElementById('stop2').onclick = () => { recognition2.stop(); indicator2.style.background='red'; };
+// --- Управление User2 ---
+startBtn2.onclick = () => { 
+  recognition2.lang = lang2Select.value + '-' + lang2Select.value.toUpperCase(); 
+  recognition2.start(); indicator2.style.background='green'; 
+  startBtn2.classList.add('recording');
+};
+stopBtn2.onclick = () => { 
+  recognition2.stop(); indicator2.style.background='red'; 
+  startBtn2.classList.remove('recording');
+};
 
 recognition1.onresult = async (event) => {
   let text = event.results[event.results.length-1][0].transcript.trim();

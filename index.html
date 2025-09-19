@@ -4,19 +4,27 @@
 <meta charset="UTF-8">
 <title>Messenger Translator 🌍</title>
 <style>
-body { font-family: Arial; background: #f0f2f5; padding: 20px; }
-h1 { color: #2c3e50; text-align: center; }
+body { font-family: Arial, sans-serif; background: #f0f2f5; padding: 20px; }
+h1 { color: #2c3e50; text-align: center; margin-bottom: 15px; }
 .controls { display: flex; justify-content: center; flex-wrap: wrap; gap: 15px; margin-bottom: 15px; }
 .controls div { display: flex; align-items: center; gap: 5px; }
-select, button { padding: 8px 12px; font-size: 14px; }
+select, button { padding: 8px 12px; font-size: 14px; border-radius: 8px; border: 1px solid #ccc; }
 #indicator1, #indicator2 { width: 12px; height: 12px; border-radius: 50%; background: red; }
-#chat { max-width: 600px; margin: auto; background: #fff; padding: 15px; border-radius: 15px; height: 400px; overflow-y: auto; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
-.message { max-width: 70%; padding: 8px 12px; margin: 5px; border-radius: 12px; position: relative; word-wrap: break-word; }
+#chat { max-width: 600px; margin: auto; background: #fff; padding: 15px; border-radius: 15px; height: 400px; overflow-y: auto; box-shadow: 0 2px 8px rgba(0,0,0,0.2); display: flex; flex-direction: column; }
+.message { 
+  max-width: 70%; padding: 10px 14px; margin: 5px; border-radius: 16px; 
+  position: relative; word-wrap: break-word; opacity: 0; 
+  transform: translateY(10px); animation: fadeIn 0.3s forwards; 
+}
 .user1 { background: #dfefff; align-self: flex-start; border-top-left-radius: 0; }
 .user2 { background: #fff0df; align-self: flex-end; border-top-right-radius: 0; }
-.copy-btn { font-size: 10px; padding: 2px 5px; margin-left: 5px; }
-.chat-wrapper { display: flex; flex-direction: column; }
+.copy-btn { font-size: 10px; padding: 2px 5px; margin-left: 5px; border: none; background: #3498db; color: white; border-radius: 5px; cursor: pointer; }
+.copy-btn:hover { background: #2980b9; }
 .note { font-size: 12px; color: #888; text-align: center; margin-top: 5px; }
+
+@keyframes fadeIn {
+  to { opacity: 1; transform: translateY(0); }
+}
 </style>
 </head>
 <body>
@@ -28,13 +36,20 @@ select, button { padding: 8px 12px; font-size: 14px; }
     <select id="lang1">
       <option value="ru-RU">Русский</option>
       <option value="en-US">Английский</option>
-      <option value="es-ES">Испанский*</option>
-      <option value="fr-FR">Французский*</option>
+      <option value="es-ES">Испанский</option>
+      <option value="fr-FR">Французский</option>
+      <option value="de-DE">Немецкий</option>
+      <option value="it-IT">Итальянский</option>
+      <option value="ja-JP">Японский</option>
+      <option value="zh-CN">Китайский</option>
+      <option value="uk-UA">Украинский</option>
+      <option value="hu-HU">Венгерский</option>
     </select>
-    <button id="start1">Start</button>
-    <button id="stop1">Stop</button>
+    <button id="start1">🎙 Start</button>
+    <button id="stop1">⏹ Stop</button>
     <div id="indicator1"></div>
   </div>
+
   <div>
     <label>User 2:</label>
     <select id="lang2">
@@ -42,22 +57,29 @@ select, button { padding: 8px 12px; font-size: 14px; }
       <option value="ru">Русский</option>
       <option value="es">Испанский</option>
       <option value="fr">Французский</option>
+      <option value="de">Немецкий</option>
+      <option value="it">Итальянский</option>
+      <option value="ja">Японский</option>
+      <option value="zh-CN">Китайский</option>
+      <option value="uk">Украинский</option>
+      <option value="hu">Венгерский</option>
     </select>
-    <button id="start2">Start</button>
-    <button id="stop2">Stop</button>
+    <button id="start2">🎙 Start</button>
+    <button id="stop2">⏹ Stop</button>
     <div id="indicator2"></div>
   </div>
 </div>
-<p class="note">*Проверяйте поддержку в Chrome</p>
+<p class="note">*Проверяйте поддержку языков в Chrome</p>
 
-<div id="chat" class="chat-wrapper"></div>
+<div id="chat"></div>
+
+<audio id="notify-sound" src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg"></audio>
 
 <script>
 if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
   alert("Ваш браузер не поддерживает SpeechRecognition. Используйте Chrome или Edge.");
 }
 
-// Создаем распознавания для каждого пользователя
 const recognition1 = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
 recognition1.continuous = true;
 recognition1.interimResults = false;
@@ -71,11 +93,11 @@ const lang1Select = document.getElementById('lang1');
 const lang2Select = document.getElementById('lang2');
 const indicator1 = document.getElementById('indicator1');
 const indicator2 = document.getElementById('indicator2');
+const sound = document.getElementById('notify-sound');
 
 let activeLang1 = lang1Select.value;
 lang1Select.onchange = () => activeLang1 = lang1Select.value;
 
-// Перевод через MyMemory API
 async function translateText(text, source, target){
   const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${source}|${target}`;
   const response = await fetch(url);
@@ -83,7 +105,6 @@ async function translateText(text, source, target){
   return data.responseData.translatedText;
 }
 
-// Добавление сообщений в чат
 function addMessage(userClass, text, translation, targetLang){
   const msg = document.createElement('div');
   msg.classList.add('message', userClass);
@@ -95,61 +116,36 @@ function addMessage(userClass, text, translation, targetLang){
   msgTr.innerHTML = `${translation} (${targetLang}) <button class="copy-btn" onclick="navigator.clipboard.writeText('${translation}')">Копировать</button>`;
   chatDiv.appendChild(msgTr);
 
-  chatDiv.scrollTop = chatDiv.scrollHeight; // плавная прокрутка вниз
+  chatDiv.scrollTop = chatDiv.scrollHeight; 
+  sound.play(); // звук уведомления
 
   const utter = new SpeechSynthesisUtterance(translation);
   utter.lang = targetLang + '-' + targetLang.toUpperCase();
   speechSynthesis.speak(utter);
 }
 
-// Старт/стоп User 1
 document.getElementById('start1').onclick = () => { recognition1.lang = activeLang1; recognition1.start(); indicator1.style.background='green'; };
 document.getElementById('stop1').onclick = () => { recognition1.stop(); indicator1.style.background='red'; };
 
-// Старт/стоп User 2
 document.getElementById('start2').onclick = () => { recognition2.lang = lang2Select.value + '-' + lang2Select.value.toUpperCase(); recognition2.start(); indicator2.style.background='green'; };
 document.getElementById('stop2').onclick = () => { recognition2.stop(); indicator2.style.background='red'; };
 
-// Обработка речи User 1 с резервным языком
 recognition1.onresult = async (event) => {
   let text = event.results[event.results.length-1][0].transcript.trim();
   let sourceLang = activeLang1.split('-')[0];
   let targetLang = lang2Select.value;
-
-  if(!text || text.length < 2){
-    recognition1.stop();
-    recognition1.lang = lang2Select.value + '-' + lang2Select.value.toUpperCase(); // резервный язык
-    recognition1.start();
-    return;
-  }
-
+  if(!text || text.length < 2){ return; }
   const translation = await translateText(text, sourceLang, targetLang);
   addMessage('user1', text + ` (${sourceLang})`, translation, targetLang);
-
-  recognition1.stop();
-  recognition1.lang = activeLang1;
-  recognition1.start();
 };
 
-// Обработка речи User 2 с резервным языком
 recognition2.onresult = async (event) => {
   let text = event.results[event.results.length-1][0].transcript.trim();
   let sourceLang = lang2Select.value;
   let targetLang = activeLang1.split('-')[0];
-
-  if(!text || text.length < 2){
-    recognition2.stop();
-    recognition2.lang = activeLang1; // резервный язык
-    recognition2.start();
-    return;
-  }
-
+  if(!text || text.length < 2){ return; }
   const translation = await translateText(text, sourceLang, targetLang);
   addMessage('user2', text + ` (${sourceLang})`, translation, targetLang);
-
-  recognition2.stop();
-  recognition2.lang = lang2Select.value + '-' + lang2Select.value.toUpperCase();
-  recognition2.start();
 };
 </script>
 </body>
